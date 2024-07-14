@@ -1,4 +1,6 @@
 mod player;
+#[cfg(test)]
+mod tests;
 mod world;
 
 use std::fmt::Error;

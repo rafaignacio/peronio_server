@@ -1,5 +1,4 @@
 use std::{
-    error::Error,
     sync::{Arc, Mutex},
     thread,
     time::Duration,
@@ -22,6 +21,7 @@ impl World {
     }
 
     pub async fn run(&self) {
+        println!("Initiating world..");
         //TODO: (de)spawn players
         World::spawn_players(self.players.clone());
         //TODO: spawn creatures spawner
@@ -40,8 +40,9 @@ impl World {
             println!("Listening on port {}...", SERVER_PORT);
 
             loop {
+                println!("awaiting user connection..");
                 let (socket, _) = listener.accept().await.unwrap();
-                println!("User connected");
+                println!("user connected");
                 let mut players = players.lock().unwrap();
 
                 players.push(Player::new(socket));
