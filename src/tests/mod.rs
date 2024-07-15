@@ -6,14 +6,14 @@ use crate::world::World;
 
 const SERVER_PORT: u16 = 8555;
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 16)]
 async fn should_run_game() {
     let world = tokio::spawn(async {
         World::new().run().await;
     });
 
     //gives time to server to start
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
     let connect = TcpStream::connect(format!("127.0.0.1:{}", SERVER_PORT)).await;
     let Ok(stream) = connect else {
