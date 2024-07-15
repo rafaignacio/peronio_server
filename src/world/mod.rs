@@ -28,7 +28,7 @@ impl World {
         //TODO: update events
 
         loop {
-            thread::sleep(Duration::from_millis(10));
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
     }
 
@@ -46,7 +46,6 @@ impl World {
                 let mut players = players.lock().unwrap();
 
                 players.push(Player::new(socket));
-                thread::sleep(Duration::from_millis(10));
             }
         });
     }
