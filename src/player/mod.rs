@@ -1,4 +1,4 @@
-use std::{thread, time::Duration};
+use std::time::Duration;
 
 use tokio::{io::AsyncReadExt, net::TcpStream};
 
@@ -18,7 +18,7 @@ impl Player {
                     }
                 };
 
-                thread::sleep(Duration::from_millis(10));
+                tokio::time::sleep(Duration::from_millis(10)).await;
             }
         });
         Player {}
