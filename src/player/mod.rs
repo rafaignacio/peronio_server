@@ -3,51 +3,87 @@ use std::{sync::Arc, time::Duration};
 use tokio::{
     io::AsyncReadExt,
     net::TcpStream,
-    sync::{broadcast, Mutex},
+    sync::{broadcast::Receiver, Mutex},
 };
 
 use crate::world::world_event::WorldEvent;
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Position(usize, usize);
 
+#[derive(Debug, Default)]
 pub struct Player {
     id: u64,
-    connection: TcpStream,
-    receiver: broadcast::Receiver<WorldEvent>,
-    position: Position,
+    connection: Option<Arc<Mutex<TcpStream>>>,
+    receiver: Option<Arc<Mutex<Receiver<WorldEvent>>>>,
+    position: Option<Position>,
 }
 
 impl Player {
-    pub fn spawn(id: u64, connection: TcpStream, receiver: broadcast::Receiver<WorldEvent>) {
-        let player = Arc::new(Mutex::new(Player {
+    pub fn new(id: u64) -> Self {
+        Player {
             id,
-            connection,
-            receiver,
-            position: Default::default(),
-        }));
+            ..Default::default()
+        }
+    }
 
-        let cloned = player.clone();
-        tokio::spawn(async move {
-            let mut p = cloned.lock().await;
-            let mut buf = [0; 1024];
+    pub fn set_connection(&mut self, connection: TcpStream) {
+        self.connection = Some(Arc::new(Mutex::new(connection)));
+    }
 
-            while let Ok(n) = p.connection.read(&mut buf).await {
-                println!("message read from player {}: {:?}", p.id, &buf[..n]);
-                tokio::time::sleep(Duration::from_millis(10)).await;
+    pub fn set_receiver(&mut self, receiver: Receiver<WorldEvent>) {
+        self.receiver = Some(Arc::new(Mutex::new(receiver)));
+    }
+
+    pub fn spawn(&self) {
+        if let Some(conn) = &self.connection {
+            let conn = Arc::clone(conn);
+            let id = self.id;
+            tokio::spawn(async move {
+                Self::listen_connection_commands(conn, id).await;
+            });
+        }
+
+        if let Some(receiver) = &self.receiver {
+            let rcv = Arc::clone(receiver);
+            tokio::spawn(async move {
+                Self::listen_world_events(rcv).await;
+            });
+        }
+    }
+
+    async fn listen_connection_commands(conn: Arc<Mutex<TcpStream>>, id: u64) {
+        let mut buf = [0; 1024];
+
+        loop {
+            let n = {
+                let mut conn_lock = conn.lock().await;
+                match conn_lock.read(&mut buf).await {
+                    Ok(n) => n,
+                    Err(e) => {
+                        eprintln!("Error reading from connection for player {}: {:?}", id, e);
+                        return;
+                    }
+                }
+            };
+
+            if n == 0 {
+                println!("Connection closed for player {}", id);
+                return;
             }
-        });
 
-        let p2 = player.clone();
-        tokio::spawn(async move {
-            let mut r = p2.lock().await;
-            println!("awaiting events");
-            while let Ok(m) = r.receiver.recv().await {
-                println!("event received {}", m);
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
+            println!("Message read from player {}: {:?}", id, &buf[..n]);
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
 
-            println!("exiting events thread");
-        });
+    async fn listen_world_events(receiver: Arc<Mutex<Receiver<WorldEvent>>>) {
+        println!("awaiting events");
+        while let Ok(m) = receiver.lock().await.recv().await {
+            println!("event received {}", m);
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        println!("exiting events thread");
     }
 }

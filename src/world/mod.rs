@@ -1,6 +1,6 @@
 pub mod world_event;
 
-use crate::player::Player;
+use crate::player::{self, Player};
 use std::{
     sync::{Arc, Mutex},
     time::Duration,
@@ -47,7 +47,11 @@ impl World {
                 let (socket, _) = listener.accept().await.unwrap();
                 println!("user connected");
 
-                Player::spawn(user_id, socket, cloned.subscribe());
+                let mut player = Player::new(user_id);
+                player.set_connection(socket);
+                player.set_receiver(cloned.subscribe());
+
+                player.spawn();
                 user_id += 1;
             }
         });
