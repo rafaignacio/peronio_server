@@ -78,12 +78,13 @@ impl Player {
     }
 
     async fn listen_world_events(receiver: Arc<Mutex<Receiver<WorldEvent>>>) {
-        println!("awaiting events");
-        while let Ok(m) = receiver.lock().await.recv().await {
-            println!("event received {}", m);
+        println!("Awaiting events");
+        let mut rcv = receiver.lock().await;
+        while let Ok(m) = rcv.recv().await {
+            println!("Event received {:?}", m);
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
 
-        println!("exiting events thread");
+        println!("Exiting events thread");
     }
 }
