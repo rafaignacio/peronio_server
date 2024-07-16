@@ -1,10 +1,7 @@
 pub mod world_event;
 
-use crate::player::{self, Player};
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use crate::player::Player;
+use std::{sync::Arc, time::Duration};
 use tokio::{net::TcpListener, sync::broadcast};
 use world_event::WorldEvent;
 
@@ -33,26 +30,35 @@ impl World {
     }
 
     fn spawn_players(&self) {
-        let cloned = self.producer.clone();
+        let cloned = Arc::clone(&self.producer);
 
         tokio::spawn(async move {
-            let listener = TcpListener::bind(format!("127.0.0.1:{}", SERVER_PORT))
-                .await
-                .unwrap();
-            println!("Listening on port {}...", SERVER_PORT);
-            let mut user_id: u64 = 1;
+            match TcpListener::bind(format!("127.0.0.1:{}", SERVER_PORT)).await {
+                Ok(listener) => {
+                    println!("Listening on port {}...", SERVER_PORT);
+                    let mut user_id: u64 = 1;
 
-            loop {
-                println!("awaiting user connection..");
-                let (socket, _) = listener.accept().await.unwrap();
-                println!("user connected");
+                    loop {
+                        match listener.accept().await {
+                            Ok((socket, _)) => {
+                                println!("User connected with ID: {}", user_id);
 
-                let mut player = Player::new(user_id);
-                player.set_connection(socket);
-                player.set_receiver(cloned.subscribe());
+                                let mut player = Player::new(user_id);
+                                player.set_connection(socket);
+                                player.set_receiver(cloned.subscribe());
 
-                player.spawn();
-                user_id += 1;
+                                player.spawn();
+                                user_id += 1;
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to accept connection: {:?}", e);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to bind to port {}: {:?}", SERVER_PORT, e);
+                }
             }
         });
     }
