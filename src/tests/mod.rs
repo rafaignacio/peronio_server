@@ -1,6 +1,6 @@
 use std::{io::Error, time::Duration};
 
-use tokio::net::TcpStream;
+use tokio::{io::AsyncReadExt, net::TcpStream};
 
 use crate::world::World;
 
@@ -17,7 +17,7 @@ async fn should_run_game() {
 
     let player1_conn = connect_player().await;
 
-    let Ok(player1) = player1_conn else {
+    let Ok(mut player1) = player1_conn else {
         world.abort();
         drop(world);
         panic!("failed: {}", player1_conn.unwrap_err());

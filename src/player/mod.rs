@@ -38,8 +38,9 @@ impl Player {
             }
         });
 
+        let p2 = player.clone();
         tokio::spawn(async move {
-            let mut r = player.lock().await;
+            let mut r = p2.lock().await;
             println!("awaiting events");
             while let Ok(m) = r.receiver.recv().await {
                 println!("event received {}", m);
