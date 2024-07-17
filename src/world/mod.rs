@@ -1,6 +1,7 @@
 pub mod world_event;
 
 use crate::player::Player;
+use async_std::sync::Mutex;
 use std::{sync::Arc, time::Duration};
 use tokio::{net::TcpListener, sync::broadcast};
 use world_event::WorldEvent;
@@ -10,6 +11,7 @@ const SERVER_PORT: u16 = 8555;
 #[derive(Clone)]
 pub struct World {
     producer: Arc<tokio::sync::broadcast::Sender<WorldEvent>>,
+    players: Arc<Mutex<Vec<Player>>>,
 }
 
 impl World {
@@ -17,6 +19,7 @@ impl World {
         let (tx, _) = broadcast::channel(2048);
         World {
             producer: Arc::new(tx),
+            players: Arc::new(Mutex::new(vec![])),
         }
     }
 
@@ -31,6 +34,7 @@ impl World {
 
     fn spawn_players(&self) {
         let cloned = Arc::clone(&self.producer);
+        let players = Arc::clone(&self.players);
 
         tokio::spawn(async move {
             match TcpListener::bind(format!("127.0.0.1:{}", SERVER_PORT)).await {
@@ -48,6 +52,7 @@ impl World {
                                 player.set_receiver(cloned.subscribe());
 
                                 player.spawn();
+                                players.lock().await.push(player);
                                 user_id += 1;
                             }
                             Err(e) => {
