@@ -2,8 +2,12 @@ pub(crate) struct PlayerSpawner;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::{
+    io::AsyncReadExt,
     net::TcpListener,
-    sync::{broadcast::Sender, mpsc, Mutex},
+    sync::{
+        broadcast::{Receiver, Sender},
+        mpsc, Mutex,
+    },
 };
 
 use super::Player;
@@ -24,7 +28,8 @@ impl PlayerSpawner {
             match listener {
                 Ok(l) => {
                     println!("Listening on 127.0.0.1:{PORT}");
-                    spawn_players(l, players).await
+                    let action_receiver = action_sender.lock().await.subscribe();
+                    spawn_players(l, players, action_receiver, command_sender).await
                 }
                 Err(e) => {
                     eprintln!("Failed to open up server on port {PORT}.\r\nErr: {e:?}");
@@ -34,12 +39,55 @@ impl PlayerSpawner {
     }
 }
 
-async fn spawn_players(listener: TcpListener, players: Arc<Mutex<HashMap<u64, Player>>>) {
+async fn spawn_players(
+    listener: TcpListener,
+    players: Arc<Mutex<HashMap<u64, Player>>>,
+    action_receiver: Receiver<Action>,
+    command_sender: Arc<Mutex<mpsc::UnboundedSender<Command>>>,
+) {
     loop {
+        println!("Awaiting user connection");
         let socket = listener.accept().await;
+
+        println!("User connected");
         match socket {
-            Ok(_) => (),
+            Ok((stream, _)) => {
+                let player_id = spawn_player(&players).await;
+                listen_player_commands(player_id, stream, &command_sender);
+            }
             Err(e) => eprintln!("Failed to accept user connection.\r\nError: {e:?}"),
         }
     }
+}
+
+fn listen_player_commands(
+    player_id: u64,
+    mut stream: tokio::net::TcpStream,
+    command_sender: &Arc<Mutex<mpsc::UnboundedSender<Command>>>,
+) {
+    let command_sender = Arc::clone(command_sender);
+    tokio::spawn(async move {
+        let mut buf: [u8; 1024] = [0; 1024];
+        while let Ok(n) = stream.read(&mut buf).await {
+            if n == 0 {
+                break;
+            }
+            if let Ok(msg) = std::str::from_utf8(&buf[..n]) {
+                println!("Message received from player {player_id}: {msg}");
+            }
+        }
+
+        let _ = command_sender
+            .lock()
+            .await
+            .send(Command::UserDisconnected(player_id));
+    });
+}
+
+async fn spawn_player(players: &Arc<Mutex<HashMap<u64, Player>>>) -> u64 {
+    let mut players = players.lock().await;
+    let id = (players.len() as u64) + 1;
+
+    players.insert(id, Player::new(id));
+    id
 }

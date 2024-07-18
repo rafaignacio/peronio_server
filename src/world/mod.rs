@@ -11,11 +11,15 @@ use crate::player::{spawner::PlayerSpawner, Player};
 #[derive(Debug, Clone, Copy)]
 pub enum Action {}
 #[derive(Debug, Clone, Copy)]
-pub enum Command {}
+pub enum Command {
+    UserDisconnected(u64),
+}
 
 impl Display for Command {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Command value")
+        match *self {
+            Command::UserDisconnected(id) => write!(f, "User {id} disconnected."),
+        }
     }
 }
 
