@@ -28,7 +28,8 @@ impl PlayerSpawner {
             match listener {
                 Ok(l) => {
                     println!("Listening on 127.0.0.1:{PORT}");
-                    let action_receiver = action_sender.lock().await.subscribe();
+                    let action_receiver =
+                        Arc::new(Mutex::new(action_sender.lock().await.subscribe()));
                     spawn_players(l, players, action_receiver, command_sender).await
                 }
                 Err(e) => {
@@ -42,7 +43,7 @@ impl PlayerSpawner {
 async fn spawn_players(
     listener: TcpListener,
     players: Arc<Mutex<HashMap<u64, Player>>>,
-    action_receiver: Receiver<Action>,
+    action_receiver: Arc<Mutex<Receiver<Action>>>,
     command_sender: Arc<Mutex<mpsc::UnboundedSender<Command>>>,
 ) {
     loop {
@@ -52,12 +53,21 @@ async fn spawn_players(
         println!("User connected");
         match socket {
             Ok((stream, _)) => {
-                let player_id = spawn_player(&players).await;
-                listen_player_commands(player_id, stream, &command_sender);
+                let spawned_player = spawn_player(&players).await;
+                let player = spawned_player.lock().await;
+                listen_player_commands(player.id, stream, &command_sender);
+                listen_world_actions(Arc::clone(&spawned_player), Arc::clone(&action_receiver));
             }
             Err(e) => eprintln!("Failed to accept user connection.\r\nError: {e:?}"),
         }
     }
+}
+
+fn listen_world_actions(player: Arc<Mutex<Player>>, action_receiver: Arc<Mutex<Receiver<Action>>>) {
+    tokio::spawn(async move {
+        let player = player.lock().await;
+        let receiver = action_receiver.lock().await;
+    });
 }
 
 fn listen_player_commands(
@@ -84,10 +94,11 @@ fn listen_player_commands(
     });
 }
 
-async fn spawn_player(players: &Arc<Mutex<HashMap<u64, Player>>>) -> u64 {
+async fn spawn_player(players: &Arc<Mutex<HashMap<u64, Player>>>) -> Arc<Mutex<Player>> {
     let mut players = players.lock().await;
     let id = (players.len() as u64) + 1;
+    let player = Player::new(id);
 
-    players.insert(id, Player::new(id));
-    id
+    players.insert(id, player);
+    Arc::new(Mutex::new(player))
 }
