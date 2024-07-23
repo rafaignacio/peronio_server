@@ -9,7 +9,9 @@ use tokio::sync::{
 use crate::player::{spawner::PlayerSpawner, Player};
 
 #[derive(Debug, Clone, Copy)]
-pub enum Action {}
+pub enum Action {
+    Move(u64, u64),
+}
 #[derive(Debug, Clone, Copy)]
 pub enum Command {
     UserDisconnected(u64),
